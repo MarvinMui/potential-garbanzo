@@ -5,9 +5,17 @@ import quandl
 from sklearn import preprocessing, model_selection, svm
 from sklearn.linear_model import LinearRegression
 import pandas as pd
+import datetime
+import matplotlib.pyplot as plt
+from matplotlib import style
 
 def main():
+    style.use('ggplot')
+
     df = quandl.get('WIKI/GOOGL')
+    # df.to_csv('googl.csv')
+    # df = pd.read_csv('googl.csv', index_col='Date', parse_dates=True)
+
     # some different ways of exploring or dissecting a dataframe
     # print(df.head())
     # print(df.iloc[:5])
@@ -37,15 +45,19 @@ def main():
 
     forecast_out_days = int(math.ceil(0.01 * len(df)))
     df['label'] = df[forecast_col].shift(-forecast_out_days)
-    df.dropna(inplace=True)
 
     print(df.head())
     print(df.tail())
 
     # Splitting and training inputs (everything except the label) to predict output (label or future close price)
+    # Also saving the unpredicted set of values for attempting to predict the future unknown close prices
     X = np.array(df.drop(['label'], axis=1))
-    y = np.array(df['label'])
     X = preprocessing.scale(X)
+    X_unpredected = X[-forecast_out_days:]
+    X = X[:-forecast_out_days]
+
+    df.dropna(inplace=True)
+    y = np.array(df['label'])
 
     assert len(X) == len(y)
 
@@ -58,6 +70,28 @@ def main():
     accuracy = classifier.score(X_test, y_test)
 
     print(f"With {accuracy:.3f} accuracy, I can predict stock price {forecast_out_days} days into the future")
+
+    forcast = classifier.predict(X_unpredected)
+
+    print(f"\nNext {forecast_out_days} days of google prices: \n", forcast)
+
+    df["Forecast"] = np.NAN
+    last_date = df.iloc[-1].name
+    last_unix = last_date.timestamp()
+    day_in_sec = 24 * 60 * 60
+    next_unix = last_unix + day_in_sec
+
+    for i in forcast:
+        next_date = datetime.datetime.fromtimestamp(next_unix)
+        next_unix += day_in_sec
+        df.loc[next_date] = [np.NAN for _ in range(len(df.columns) - 1)] + [i]
+
+    df['Adj. Close'].plot()
+    df['Forecast'].plot()
+    plt.legend(loc=4)
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.show()
 
 if __name__ == '__main__':
     main()
